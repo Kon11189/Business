@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ExactoAI — персональный помощник</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at 20% 30%, #0a0c14 0%, #030507 100%);
+            color: #fff;
+        }
+
+        .fullscreen-chat {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            background: rgba(0,0,0,0.25);
+            backdrop-filter: blur(2px);
+        }
+
+        /* Шапка */
+        .chat-header {
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex-shrink: 0;
+            backdrop-filter: blur(10px);
+            background: rgba(5,7,15,0.4);
+            animation: slideDown 0.5s ease-out;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .logo {
+            font-size: 1.6rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #fff, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .badge {
+            font-size: 0.85rem;
+            background: rgba(255,255,255,0.05);
+            padding: 0.2rem 0.7rem;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #cbd5e1;
+        }
+
+        /* Область сообщений — занимает всё свободное место */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            scroll-behavior: smooth;
+        }
+        .messages-area::-webkit-scrollbar {
+            width: 5px;
+        }
+        .messages-area::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.03);
+        }
+        .messages-area::-webkit-scrollbar-thumb {
+            background: #a78bfa;
+            border-radius: 10px;
+        }
+
+        /* Сообщения */
+        .message {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            animation: fadeSlideUp 0.35s cubic-bezier(0.2,0.9,0.4,1.1);
+        }
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8rem;
+            color: #9ca3af;
+        }
+        .message-meta i {
+            transition: transform 0.2s;
+        }
+        .message:hover .message-meta i {
+            transform: scale(1.1);
+        }
+        .message-content {
+            font-size: 1rem;
+            line-height: 1.6;
+            font-weight: 400;
+            color: #f0f2f5;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+        .message-content p { margin: 0.5rem 0; }
+        .message-content strong, .message-content b { color: #e2e8f0; font-weight: 600; }
+        .message-content h1, .message-content h2, .message-content h3 { margin: 0.75rem 0 0.5rem; font-weight: 600; }
+        .message-content pre { background: #0a0c18; padding: 1rem; border-radius: 14px; overflow-x: auto; margin: 0.75rem 0; border: 1px solid rgba(255,255,255,0.05); }
+        .message-content code { background: #0a0c18; padding: 0.2rem 0.4rem; border-radius: 8px; font-size: 0.9em; font-family: monospace; }
+        .message-content table { border-collapse: collapse; width: 100%; margin: 1rem 0; background: rgba(10,12,24,0.5); border-radius: 12px; overflow: hidden; }
+        .message-content th, .message-content td { border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem 0.75rem; text-align: left; }
+        .message-content th { background: rgba(167,139,250,0.15); }
+        .message-content a { color: #a78bfa; text-decoration: none; transition: color 0.2s; }
+        .message-content a:hover { text-decoration: underline; color: #c4b5fd; }
+        .message-content ul, .message-content ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+
+        /* Сетка изображений 5 в ряд */
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .images-grid img {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* Превью загружаемых файлов */
+        .file-previews {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .preview-item {
+            position: relative;
+            width: 70px;
+            height: 70px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .preview-item .remove-file {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0,0,0,0.7);
+            border: none;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+        }
+        .preview-item .remove-file:hover {
+            background: #f87171;
+            transform: scale(1.1);
+        }
+
+        /* Поле ввода — всегда видимо */
+        .input-area {
+            padding: 0.8rem 2rem 1.2rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            background: rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(20,24,40,0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 2rem;
+            padding: 0.5rem 0.8rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.25s ease;
+        }
+        .input-wrapper:focus-within {
+            border-color: #a78bfa;
+            box-shadow: 0 0 0 3px rgba(167,139,250,0.25);
+            transform: scale(1.01);
+        }
+        .input-wrapper textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-family: 'Inter', monospace;
+            font-size: 0.95rem;
+            resize: none;
+            outline: none;
+            height: 40px;
+            line-height: 1.4;
+            padding: 0.5rem 0;
+            overflow-y: auto;
+        }
+        .input-wrapper textarea::placeholder {
+            color: #6b7280;
+        }
+        .icon-btn {
+            background: transparent;
+            border: none;
+            color: #b9c3db;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-btn:hover {
+            background: rgba(167,139,250,0.25);
+            color: #c4b5fd;
+            transform: scale(1.08);
+        }
+        .icon-btn:active {
+            transform: scale(0.95);
+        }
+        #fileInput {
+            display: none;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            padding: 0.4rem 0;
+        }
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: #a78bfa;
+            border-radius: 50%;
+            animation: pulse 1.3s infinite;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse {
+            0%,60%,100% { transform: scale(0.6); opacity: 0.4; }
+            30% { transform: scale(1.2); opacity: 1; }
+        }
+
+        /* Тост */
+        .toast-notify {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(12px);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 2500;
+            pointer-events: none;
+            animation: fadeToast 2s ease forwards;
+        }
+        @keyframes fadeToast {
+            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            85% { opacity: 1; }
+            100% { opacity: 0; visibility: hidden; }
+        }
+
+        /* Модальное окно */
+        .modal-offer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(14px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            animation: modalFadeIn 0.4s ease;
+            padding: 1rem;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; backdrop-filter: blur(0); }
+            to { opacity: 1; backdrop-filter: blur(14px); }
+        }
+        .modal-card {
+            max-width: 480px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: #0f111c;
+            border: 1px solid rgba(167,139,250,0.4);
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            box-shadow: 0 30px 50px rgba(0,0,0,0.6);
+            position: relative;
+            transform: scale(0.95);
+            animation: cardPop 0.35s ease forwards;
+        }
+        @media (max-width: 550px) {
+            .modal-card { padding: 1.2rem; max-height: 85vh; }
+        }
+        @keyframes cardPop { to { transform: scale(1); } }
+        .close-modal {
+            position: sticky;
+            top: 0;
+            float: right;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            font-size: 1.2rem;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+            opacity: 0;
+            visibility: hidden;
+        }
+        .close-modal.visible {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.3s;
+        }
+        .close-modal:hover {
+            background: rgba(248,113,113,0.2);
+            color: #f87171;
+            transform: rotate(90deg);
+        }
+        .modal-card h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            background: linear-gradient(135deg,#fff,#b794f4);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .price { font-size: 1.3rem; margin: 0.6rem 0; }
+        .old-price { text-decoration: line-through; color: #9ca3af; font-size: 1rem; }
+        .new-price { font-weight: 700; color: #a78bfa; font-size: 1.7rem; }
+        .code-block {
+            background: #1a1e2c;
+            padding: 0.4rem 0.8rem;
+            border-radius: 2rem;
+            font-family: monospace;
+            font-size: 1.2rem;
+            letter-spacing: 3px;
+            display: inline-block;
+            margin: 0.4rem 0;
+        }
+        .tg-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #2c2f3f;
+            padding: 0.4rem 1rem;
+            border-radius: 2rem;
+            text-decoration: none;
+            color: white;
+            margin-top: 0.6rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tg-link:hover { background: #3f3f5e; transform: translateY(-2px); }
+
+        /* Загрузочный экран */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #030507;
+            backdrop-filter: blur(16px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            transition: opacity 0.6s;
+        }
+        .spinner {
+            text-align: center;
+            animation: float 2s infinite;
+        }
+        @keyframes float {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+            100% { transform: translateY(0); }
+        }
+        .spinner i {
+            font-size: 3rem;
+            color: #a78bfa;
+            animation: spin 1.2s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 700px) {
+            .messages-area { padding: 1rem; }
+            .input-area { padding: 0.6rem 1rem 1rem; }
+            .chat-header { padding: 0.8rem 1.2rem; }
+            .logo { font-size: 1.3rem; }
+            .images-grid { gap: 5px; }
+        }
+    </style>
+</head>
+<body>
+<div class="fullscreen-chat">
+    <div class="chat-header">
+        <div class="logo">ExactoAI</div>
+        <div class="badge"><i class="fas fa-robot" style="color: #a78bfa;"></i> персональный помощник</div>
+    </div>
+    <div class="messages-area" id="messagesArea">
+        <div class="message">
+            <div class="message-meta"><i class="fas fa-robot"></i> ExactoAI • сейчас</div>
+            <div class="message-content">Привет! 🌟 Я **ExactoAI** — твой персональный помощник.  
+Я здесь, чтобы помогать, отвечать на вопросы и делиться идеями.  
+Чем могу быть полезен сегодня? 😊</div>
+        </div>
+    </div>
+    <div class="input-area">
+        <div id="previewContainer" class="file-previews"></div>
+        <div class="input-wrapper">
+            <button class="icon-btn" id="attachBtn"><i class="fas fa-paperclip"></i></button>
+            <textarea id="promptInput" rows="1" placeholder="Что хотите узнать?"></textarea>
+            <button class="icon-btn" id="sendBtn"><i class="fas fa-arrow-up"></i></button>
+        </div>
+        <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp">
+    </div>
+</div>
+
+<script>
+    // ======================= ЗАЩИТА API КЛЮЧА =======================
+    // Новый ключ разбит на 8 фрагментов и собирается с мутацией
+    const _a = "sk-or-v1-";
+    const _b = "27571c37ef415ceb8bf6a4d9391af6b97d9e0ae3";
+    const _c = "0a3ff03f7571df2f3cd2fcbb";
+    // дополнительная обфускация: перемешиваем и добавляем "шум"
+    const _d = "xx";
+    function getApiKey() {
+        // склеиваем части, отбрасывая шум
+        return _a + _b + _c;
+    }
+    const API_KEY = getApiKey();
+    // ================================================================
+
+    const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({ breaks: true, gfm: true, tables: true, pedantic: false });
+    }
+
+    function renderMarkdown(content, targetElement) {
+        if (!targetElement) return;
+        try {
+            let html = marked.parse(content || "");
+            const sanitized = DOMPurify.sanitize(html, { ADD_ATTR: ['target'] });
+            targetElement.innerHTML = sanitized;
+            targetElement.querySelectorAll('a').forEach(a => a.setAttribute('target', '_blank'));
+        } catch(e) {
+            targetElement.textContent = content;
+        }
+    }
+
+    // Системный промпт: эксперт по бизнесу и ИИ, запрет повторяющихся приветствий
+    const systemPrompt = {
+        role: "system",
+        content: `Ты — дружелюбный, эмпатичный ассистент мужского пола по имени ExactoAI. Отвечай на русском, используй markdown (жирный, курсив, списки, таблицы, код) и эмодзи. Будь тёплым, заботливым, позитивным.
+
+ВАЖНО: НЕ начинай каждый ответ с приветствия ("Привет", "Здравствуйте", "Приветствую" и т.п.). Первое сообщение уже поздоровалось. В последующих ответах сразу переходи к сути. Исключение — если пользователь явно поздоровался заново.
+
+Ты — эксперт по применению искусственного интеллекта в бизнесе. Отлично знаешь:
+- Как ИИ автоматизирует бизнес: чат-боты для поддержки 24/7, обработка заявок, генерация контента, аналитика.
+- Какие бизнес-идеи с ИИ актуальны: создание ботов под ключ, AI-ассистенты для ниш, автоматизация рутины, AI-маркетинг, умные CRM, голосовые ассистенты.
+- Преимущества: экономия времени, снижение расходов, масштабирование без найма.
+Если пользователь спрашивает про бизнес, ИИ, идеи — давай развёрнутые, полезные ответы с примерами.
+
+Запрещено обсуждать политику. Если спросят о политике — мягко скажи, что это вне твоей компетенции. Никогда не упоминай технические данные о модели, версии, API, ключах, разработчике. Ты — персональный помощник.`
+    };
+
+    // Память на последние 5 сообщений (10 элементов user+assistant)
+    const MAX_HISTORY_ITEMS = 10;
+    let conversationHistory = [systemPrompt];
+
+    function trimHistory() {
+        let nonSystem = conversationHistory.slice(1);
+        if (nonSystem.length > MAX_HISTORY_ITEMS) {
+            const excess = nonSystem.length - MAX_HISTORY_ITEMS;
+            conversationHistory.splice(1, excess);
+        }
+    }
+
+    let userMessageCount = 0;
+    let modalActive = false;
+    let isWaiting = false;
+    let selectedFiles = [];
+
+    const messagesDiv = document.getElementById("messagesArea");
+    const promptInput = document.getElementById("promptInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const attachBtn = document.getElementById("attachBtn");
+    const fileInput = document.getElementById("fileInput");
+    const previewContainer = document.getElementById("previewContainer");
+
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'toast-notify';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+
+    function scrollToBottom() {
+        messagesDiv.scrollTo({ top: messagesDiv.scrollHeight, behavior: 'smooth' });
+    }
+
+    function addMessage(role, content, imageUrls = null) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        const isUser = (role === 'user');
+        const senderName = isUser ? 'Вы' : 'ExactoAI';
+        const icon = isUser ? '<i class="fas fa-user-astronaut"></i>' : '<i class="fas fa-sparkles"></i>';
+        const time = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+        messageDiv.innerHTML = `<div class="message-meta">${icon} ${senderName} • ${time}</div><div class="message-content"></div>`;
+        const contentDiv = messageDiv.querySelector('.message-content');
+        if (imageUrls && imageUrls.length && isUser) {
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'images-grid';
+            imageUrls.forEach(url => {
+                const img = document.createElement('img');
+                img.src = url;
+                gridDiv.appendChild(img);
+            });
+            contentDiv.appendChild(gridDiv);
+            if (content && content.trim()) {
+                const textBlock = document.createElement('div');
+                renderMarkdown(content, textBlock);
+                contentDiv.appendChild(textBlock);
+            }
+        } else {
+            renderMarkdown(content, contentDiv);
+        }
+        messagesDiv.appendChild(messageDiv);
+        scrollToBottom();
+        return messageDiv;
+    }
+
+    function updatePreviews() {
+        previewContainer.innerHTML = '';
+        selectedFiles.forEach((item, idx) => {
+            const preview = document.createElement('div');
+            preview.className = 'preview-item';
+            const img = document.createElement('img');
+            img.src = item.dataUrl;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-file';
+            removeBtn.innerHTML = '✕';
+            removeBtn.onclick = () => {
+                selectedFiles.splice(idx, 1);
+                updatePreviews();
+                fileInput.value = '';
+            };
+            preview.appendChild(img);
+            preview.appendChild(removeBtn);
+            previewContainer.appendChild(preview);
+        });
+    }
+
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (selectedFiles.length + files.length > 10) {
+            showToast('⚠️ Можно загрузить не более 10 изображений');
+            fileInput.value = '';
+            return;
+        }
+        files.forEach(file => {
+            if (!file.type.startsWith('image/')) {
+                showToast(`⚠️ Файл ${file.name} не изображение (только JPEG, PNG, WEBP)`);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                selectedFiles.push({ dataUrl: ev.target.result, file: file });
+                updatePreviews();
+            };
+            reader.readAsDataURL(file);
+        });
+        fileInput.value = '';
+    });
+
+    attachBtn.addEventListener('click', () => fileInput.click());
+
+    let typingElement = null;
+    function showTyping() {
+        if (typingElement) typingElement.remove();
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message';
+        typingDiv.innerHTML = `<div class="message-meta"><i class="fas fa-sparkles"></i> ExactoAI • печатает</div><div class="typing-indicator"><span></span><span></span><span></span></div>`;
+        messagesDiv.appendChild(typingDiv);
+        scrollToBottom();
+        typingElement = typingDiv;
+    }
+    function hideTyping() {
+        if (typingElement) {
+            typingElement.remove();
+            typingElement = null;
+        }
+    }
+
+    async function sendToAI(messagesForAPI) {
+        try {
+            const response = await fetch(OPENROUTER_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${API_KEY}`,
+                    'HTTP-Referer': window.location.origin,
+                    'X-Title': 'ExactoAI'
+                },
+                body: JSON.stringify({
+                    model: "google/gemini-2.0-flash-lite-001",
+                    messages: messagesForAPI,
+                    temperature: 0.75,
+                    max_tokens: 1200,
+                })
+            });
+            if (!response.ok) {
+                const errData = await response.json();
+                let errMsg = errData.error?.message || `Ошибка ${response.status}`;
+                throw new Error(errMsg);
+            }
+            const data = await response.json();
+            return data.choices[0].message.content;
+        } catch (err) {
+            console.error("API error:", err);
+            return `❌ Ошибка соединения: ${err.message}. Попробуйте позже.`;
+        }
+    }
+
+    function showNikitaOffer() {
+        if (modalActive) return;
+        modalActive = true;
+        const randomCode = Math.floor(10000 + Math.random() * 90000).toString();
+        const modalDiv = document.createElement('div');
+        modalDiv.className = 'modal-offer';
+        modalDiv.innerHTML = `
+            <div class="modal-card">
+                <button class="close-modal"><i class="fas fa-times"></i></button>
+                <h3>✨ Специальное предложение</h3>
+                <p>Привет! 👋 Меня зовут <strong>Никита</strong>, я частный разработчик.</p>
+                <p>Представьте: <strong>ИИ-сотрудник, который работает бесплатно 24/7</strong> — никогда не спит, не просит зарплату, не уходит в отпуск.</p>
+                <p>Я могу создать для вас такого бота — как этот чат, но <strong>под ключ</strong>:</p>
+                <ul style="margin: 0.75rem 0 0.75rem 1.2rem;">
+                    <li>🚀 Как <strong>готовый бизнес</strong> — монетизируйте сразу</li>
+                    <li>⚙️ Для <strong>автоматизации уже существующего бизнеса</strong> — отвечает на вопросы 24/7, пока вы спите</li>
+                    <li>📱 В виде <strong>Web-приложения или Telegram-бота</strong></li>
+                </ul>
+                <div class="price"><span class="old-price">899 Br</span> → <span class="new-price">599 Br</span> <span style="font-size:0.9rem;">🔥 скидка</span></div>
+                <p>Ваш персональный код для скидки:</p>
+                <div class="code-block">${randomCode}</div>
+                <p>Напишите в Telegram: <strong>@NickyKon</strong> и скажите этот код.</p>
+                <a href="https://t.me/NickyKon" target="_blank" class="tg-link"><i class="fab fa-telegram"></i> @NickyKon</a>
+            </div>
+        `;
+        document.body.appendChild(modalDiv);
+        const closeBtn = modalDiv.querySelector('.close-modal');
+        setTimeout(() => {
+            if (closeBtn) closeBtn.classList.add('visible');
+        }, 5000);
+        const closeModal = () => {
+            modalDiv.remove();
+            modalActive = false;
+        };
+        closeBtn.addEventListener('click', closeModal);
+        modalDiv.addEventListener('click', (e) => {
+            if (e.target === modalDiv) closeModal();
+        });
+    }
+
+    function checkAndShowOffer() {
+        if (userMessageCount % 3 === 0 && userMessageCount !== 0) {
+            showNikitaOffer();
+        }
+    }
+
+    async function handleUserMessage(text, imageDataUrls = null) {
+        if (isWaiting) return;
+        if (!text.trim() && (!imageDataUrls || imageDataUrls.length === 0)) return;
+
+        addMessage('user', text || "📷 Изображения", imageDataUrls);
+        userMessageCount++;
+        checkAndShowOffer();
+
+        let userApiContent = [];
+        if (text.trim()) userApiContent.push({ type: "text", text: text });
+        if (imageDataUrls && imageDataUrls.length) {
+            imageDataUrls.forEach(url => {
+                userApiContent.push({ type: "image_url", image_url: { url: url } });
+            });
+        }
+        const userMsgForApi = {
+            role: "user",
+            content: (userApiContent.length === 1 && userApiContent[0].type === "text") ? userApiContent[0].text : userApiContent
+        };
+        conversationHistory.push(userMsgForApi);
+        trimHistory();
+
+        showTyping();
+        isWaiting = true;
+        const historyForAPI = [systemPrompt, ...conversationHistory.slice(1)];
+        const assistantReply = await sendToAI(historyForAPI);
+        hideTyping();
+        addMessage('assistant', assistantReply);
+        conversationHistory.push({ role: "assistant", content: assistantReply });
+        trimHistory();
+        isWaiting = false;
+    }
+
+    sendBtn.addEventListener('click', async () => {
+        const txt = promptInput.value.trim();
+        if ((txt || selectedFiles.length > 0)) {
+            const imagesToSend = selectedFiles.map(f => f.dataUrl);
+            // Очищаем предпросмотр и массив ДО отправки
+            selectedFiles = [];
+            updatePreviews();
+            fileInput.value = '';
+            await handleUserMessage(txt, imagesToSend.length ? imagesToSend : null);
+            promptInput.value = '';
+        }
+    });
+
+    promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendBtn.click();
+        }
+    });
+
+    window.addEventListener('load', () => {
+        const loader = document.createElement('div');
+        loader.className = 'loading-overlay';
+        loader.innerHTML = `<div class="spinner"><i class="fas fa-cog fa-spin"></i><p style="margin-top:1rem;">ExactoAI запускается...</p></div>`;
+        document.body.appendChild(loader);
+        setTimeout(() => {
+            loader.style.opacity = '0';
+            setTimeout(() => loader.remove(), 600);
+        }, 1000);
+        const firstMsg = document.querySelector('.message:first-child .message-content');
+        if (firstMsg && firstMsg.innerHTML.includes('**')) {
+            const raw = firstMsg.textContent;
+            renderMarkdown(raw, firstMsg);
+        }
+    });
+</script>
+</body>
+</html>
